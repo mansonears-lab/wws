@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Vault Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        
+        :root {
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --bg-main: #0b0f1a;
+            --bg-card: #161b2c;
+            --sidebar: #111827;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: #f8fafc;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            overflow: hidden;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        .sidebar-link.active {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+            border-right: 3px solid var(--accent);
+        }
+
+        .media-card .actions { opacity: 0; transform: translateY(10px); transition: all 0.2s ease; }
+        .media-card:hover .actions { opacity: 1; transform: translateY(0); }
+        .media-card:hover img, .media-card:hover video { transform: scale(1.05); }
+
+        .glass {
+            background: rgba(22, 27, 44, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        #dropOverlay {
+            display: none;
+            background: rgba(99, 102, 241, 0.2);
+            border: 4px dashed var(--accent);
+        }
+
+        /* Auth Screen Styling */
+        #authScreen {
+            background-image: radial-gradient(circle at top right, rgba(99, 102, 241, 0.15), transparent),
+                              radial-gradient(circle at bottom left, rgba(79, 70, 229, 0.1), transparent);
+        }
+    </style>
+</head>
+<body class="flex h-screen">
+
+    <!-- Auth Screen -->
+    <div id="authScreen" class="fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center p-6">
+        <div class="w-full max-w-md space-y-8 glass p-10 rounded-3xl shadow-2xl border border-slate-800">
+            <div class="text-center">
+                <div class="inline-flex bg-indigo-600 p-4 rounded-2xl shadow-lg shadow-indigo-500/20 mb-6">
+                    <i class="fas fa-vault text-3xl text-white"></i>
+                </div>
+                <h2 class="text-3xl font-bold tracking-tight">Access <span class="text-indigo-500">Vault</span></h2>
+                <p class="text-slate-400 mt-2 text-sm">Authentication required to view private media</p>
+            </div>
+
+            <form id="loginForm" class="space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Username</label>
+                    <div class="relative">
+                        <i class="fas fa-user absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                        <input type="text" id="userIn" required class="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-3 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-sm" placeholder="Zenoom">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Password</label>
+                    <div class="relative">
+                        <i class="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                        <input type="password" id="passIn" required class="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-3 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-sm" placeholder="••••••••">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all transform active:scale-95">
+                    Unlock Vault
+                </button>
+            </form>
+            <p id="errorMsg" class="text-red-400 text-xs text-center hidden animate-pulse">Invalid credentials. Access denied.</p>
+        </div>
+    </div>
+
+    <!-- Main App Layout (Hidden until Auth) -->
+    <div id="appLayout" class="flex w-full h-full opacity-0 pointer-events-none transition-opacity duration-700">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-slate-950 border-r border-slate-800 flex flex-col hidden lg:flex">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="bg-indigo-600 p-2 rounded-xl shadow-lg shadow-indigo-500/20">
+                        <i class="fas fa-vault text-xl text-white"></i>
+                    </div>
+                    <h1 class="text-xl font-bold tracking-tight">Vault<span class="text-indigo-500">Pro</span></h1>
+                </div>
+
+                <nav class="space-y-1">
+                    <button onclick="setFilter('all')" id="link-all" class="sidebar-link active w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all hover:bg-slate-900">
+                        <i class="fas fa-layer-group w-5"></i> All Media
+                    </button>
+                    <button onclick="setFilter('photos')" id="link-photos" class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all hover:bg-slate-900">
+                        <i class="fas fa-image w-5"></i> Photos
+                    </button>
+                    <button onclick="setFilter('videos')" id="link-videos" class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all hover:bg-slate-900">
+                        <i class="fas fa-video w-5"></i> Videos
+                    </button>
+                    <button onclick="setFilter('favorites')" id="link-favorites" class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all hover:bg-slate-900">
+                        <i class="fas fa-heart w-5"></i> Favorites
+                    </button>
+                    <div class="pt-4 border-t border-slate-800 mt-4">
+                        <button onclick="handleLogout()" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/5 transition-all">
+                            <i class="fas fa-right-from-bracket w-5"></i> Logout
+                        </button>
+                    </div>
+                </nav>
+            </div>
+
+            <div class="mt-auto p-6 space-y-4">
+                <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                    <p class="text-xs text-slate-500 font-bold mb-2 uppercase tracking-widest">Storage</p>
+                    <div class="w-full bg-slate-800 h-1.5 rounded-full mb-2">
+                        <div id="storageBar" class="bg-indigo-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <p id="storageText" class="text-xs text-slate-400">0 MB used</p>
+                </div>
+                <button onclick="document.getElementById('fileInput').click()" class="w-full bg-indigo-600 hover:bg-indigo-700 py-3 rounded-xl font-semibold shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-cloud-arrow-up text-white"></i> Upload
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col relative overflow-hidden">
+            <!-- Top Bar -->
+            <header class="h-20 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950/50 backdrop-blur-md">
+                <div class="relative w-96">
+                    <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                    <input type="text" id="searchInput" placeholder="Search your vault..." class="w-full bg-slate-900 border border-slate-800 rounded-full py-2.5 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-white">
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <select id="sortSelect" onchange="render()" class="bg-slate-900 border border-slate-800 text-xs rounded-lg px-4 py-2 focus:outline-none cursor-pointer hover:border-slate-600 text-white">
+                        <option value="date-desc">Newest First</option>
+                        <option value="date-asc">Oldest First</option>
+                        <option value="size-desc">Size (Large)</option>
+                        <option value="size-asc">Size (Small)</option>
+                    </select>
+                    <div class="h-8 w-[1px] bg-slate-800"></div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-500 font-bold hidden md:block">ZEN OOM</span>
+                        <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold">ZO</div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Gallery -->
+            <div id="gallery" class="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                <div id="emptyState" class="flex flex-col items-center justify-center h-full text-slate-500 space-y-4">
+                    <div class="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center text-4xl">
+                        <i class="fas fa-photo-film"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold text-slate-300">Vault is empty</h2>
+                    <p class="text-sm max-w-xs text-center">Protected media will appear here after upload.</p>
+                </div>
+                <div id="mediaGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6"></div>
+            </div>
+
+            <!-- Drop Overlay -->
+            <div id="dropOverlay" class="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+                <div class="text-center">
+                    <i class="fas fa-cloud-arrow-up text-6xl text-indigo-500 mb-4 animate-bounce"></i>
+                    <h2 class="text-2xl font-bold">Drop to Secure</h2>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Hidden Input -->
+    <input type="file" id="fileInput" class="hidden" multiple accept="image/*,video/*">
+
+    <!-- Player Modal -->
+    <div id="playerModal" class="fixed inset-0 z-[300] bg-black/98 hidden flex items-center justify-center">
+        <button onclick="closePlayer()" class="absolute top-8 right-8 text-white/50 hover:text-white text-4xl z-[110] transition-colors">
+            <i class="fas fa-times-circle"></i>
+        </button>
+
+        <button onclick="navPlayer(-1)" class="absolute left-8 top-1/2 -translate-y-1/2 text-white/20 hover:text-white text-5xl z-[110]">
+            <i class="fas fa-chevron-left"></i>
+        </button>
+        <button onclick="navPlayer(1)" class="absolute right-8 top-1/2 -translate-y-1/2 text-white/20 hover:text-white text-5xl z-[110]">
+            <i class="fas fa-chevron-right"></i>
+        </button>
+
+        <div class="w-full h-full flex items-center justify-center p-12">
+            <div id="playerContent" class="max-w-7xl max-h-full flex items-center justify-center relative"></div>
+        </div>
+
+        <div class="absolute bottom-0 inset-x-0 p-8 glass flex justify-between items-end pointer-events-none">
+            <div class="pointer-events-auto">
+                <h2 id="playerName" class="text-2xl font-bold mb-1">File Name</h2>
+                <p id="playerMeta" class="text-slate-400 text-sm font-mono"></p>
+            </div>
+            <div class="flex gap-4 pointer-events-auto">
+                <button id="playerFavBtn" class="bg-slate-800/50 hover:bg-slate-800 p-4 rounded-full text-xl transition-all">
+                    <i class="far fa-heart"></i>
+                </button>
+                <button id="playerDownloadBtn" class="bg-indigo-600 hover:bg-indigo-700 p-4 rounded-full text-xl transition-all shadow-lg">
+                    <i class="fas fa-download text-white"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastRoot" class="fixed bottom-6 right-6 z-[400] space-y-2"></div>
+
+    <script>
+        // Auth Logic
+        const CREDENTIALS = { u: 'zenoom', p: 'AdMin123' };
+        const authScreen = document.getElementById('authScreen');
+        const appLayout = document.getElementById('appLayout');
+        const loginForm = document.getElementById('loginForm');
+        const errorMsg = document.getElementById('errorMsg');
+
+        loginForm.onsubmit = (e) => {
+            e.preventDefault();
+            const u = document.getElementById('userIn').value;
+            const p = document.getElementById('passIn').value;
+
+            if (u === CREDENTIALS.u && p === CREDENTIALS.p) {
+                unlockVault();
+            } else {
+                errorMsg.classList.remove('hidden');
+                setTimeout(() => errorMsg.classList.add('hidden'), 3000);
+            }
+        };
+
+        function unlockVault() {
+            authScreen.style.opacity = '0';
+            setTimeout(() => {
+                authScreen.classList.add('hidden');
+                appLayout.classList.remove('pointer-events-none');
+                appLayout.classList.add('opacity-100');
+            }, 500);
+            showToast("Vault Unlocked. Welcome back, Zenoom.");
+        }
+
+        function handleLogout() {
+            window.location.reload(); // Simplest way to clear session and state
+        }
+
+        // Vault Application State
+        let items = [];
+        let currentFilter = 'all';
+        let searchQuery = '';
+        let activePlayerIndex = -1;
+
+        const mediaGrid = document.getElementById('mediaGrid');
+        const emptyState = document.getElementById('emptyState');
+        const fileInput = document.getElementById('fileInput');
+        const searchInput = document.getElementById('searchInput');
+        const dropOverlay = document.getElementById('dropOverlay');
+
+        fileInput.addEventListener('change', e => handleFiles(e.target.files));
+        searchInput.addEventListener('input', e => {
+            searchQuery = e.target.value.toLowerCase();
+            render();
+        });
+
+        window.addEventListener('dragover', (e) => { e.preventDefault(); dropOverlay.style.display = 'flex'; });
+        window.addEventListener('dragleave', (e) => { e.preventDefault(); dropOverlay.style.display = 'none'; });
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropOverlay.style.display = 'none';
+            handleFiles(e.dataTransfer.files);
+        });
+
+        async function handleFiles(files) {
+            const newFiles = Array.from(files);
+            for (const file of newFiles) {
+                const item = await processFile(file);
+                items.push(item);
+            }
+            render();
+            showToast(`${newFiles.length} files encrypted and stored.`);
+        }
+
+        async function processFile(file) {
+            const isVideo = file.type.startsWith('video/');
+            const url = URL.createObjectURL(file);
+            let duration = 0;
+
+            if (isVideo) {
+                duration = await new Promise(res => {
+                    const v = document.createElement('video');
+                    v.preload = 'metadata';
+                    v.onloadedmetadata = () => res(v.duration);
+                    v.src = url;
+                });
+            }
+
+            return {
+                id: crypto.randomUUID(),
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                url: url,
+                isVideo: isVideo,
+                timestamp: Date.now(),
+                duration: duration,
+                isFavorite: false
+            };
+        }
+
+        function setFilter(f) {
+            currentFilter = f;
+            document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+            document.getElementById(`link-${f}`).classList.add('active');
+            render();
+        }
+
+        function toggleFavorite(id, e) {
+            if(e) e.stopPropagation();
+            const item = items.find(i => i.id === id);
+            if(item) {
+                item.isFavorite = !item.isFavorite;
+                render();
+            }
+        }
+
+        function deleteItem(id, e) {
+            if(e) e.stopPropagation();
+            const idx = items.findIndex(i => i.id === id);
+            if(idx > -1) {
+                URL.revokeObjectURL(items[idx].url);
+                items.splice(idx, 1);
+                render();
+            }
+        }
+
+        function render() {
+            let filtered = items.filter(i => {
+                const matchesSearch = i.name.toLowerCase().includes(searchQuery);
+                if (currentFilter === 'photos') return !i.isVideo && matchesSearch;
+                if (currentFilter === 'videos') return i.isVideo && matchesSearch;
+                if (currentFilter === 'favorites') return i.isFavorite && matchesSearch;
+                return matchesSearch;
+            });
+
+            const [crit, dir] = document.getElementById('sortSelect').value.split('-');
+            filtered.sort((a, b) => {
+                const valA = crit === 'date' ? a.timestamp : a.size;
+                const valB = crit === 'date' ? b.timestamp : b.size;
+                return dir === 'asc' ? valA - valB : valB - valA;
+            });
+
+            if (filtered.length === 0) {
+                mediaGrid.innerHTML = '';
+                emptyState.style.display = 'flex';
+            } else {
+                emptyState.style.display = 'none';
+                mediaGrid.innerHTML = filtered.map((item, idx) => `
+                    <div onclick="openPlayer('${item.id}')" class="media-card group relative aspect-square bg-slate-900 rounded-2xl overflow-hidden cursor-pointer border border-slate-800 transition-all hover:border-indigo-500/50">
+                        ${item.isVideo ? 
+                            `<video src="${item.url}" class="w-full h-full object-cover transition-transform duration-500"></video>
+                             <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-bold text-white uppercase tracking-wider">Video</div>` :
+                            `<img src="${item.url}" class="w-full h-full object-cover transition-transform duration-500" alt="${item.name}">`
+                        }
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60"></div>
+                        <div class="actions absolute inset-x-0 bottom-0 p-4 flex justify-between items-center z-10">
+                            <button onclick="toggleFavorite('${item.id}', event)" class="w-8 h-8 rounded-full flex items-center justify-center ${item.isFavorite ? 'bg-red-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'} transition-all">
+                                <i class="${item.isFavorite ? 'fas' : 'far'} fa-heart"></i>
+                            </button>
+                            <button onclick="deleteItem('${item.id}', event)" class="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-red-500 transition-all">
+                                <i class="fas fa-trash-alt text-xs"></i>
+                            </button>
+                        </div>
+                        ${item.isVideo ? `<div class="absolute inset-0 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
+                            <i class="fas fa-play text-2xl"></i>
+                        </div><span class="absolute top-3 right-3 bg-black/60 px-2 py-1 rounded text-[10px] font-mono">${formatTime(item.duration)}</span>` : ''}
+                    </div>
+                `).join('');
+            }
+            updateStorage();
+        }
+
+        function openPlayer(id) {
+            const index = items.findIndex(i => i.id === id);
+            if (index === -1) return;
+            activePlayerIndex = index;
+            updatePlayerContent();
+            document.getElementById('playerModal').classList.remove('hidden');
+        }
+
+        function updatePlayerContent() {
+            const item = items[activePlayerIndex];
+            const content = document.getElementById('playerContent');
+            const name = document.getElementById('playerName');
+            const meta = document.getElementById('playerMeta');
+            const favBtn = document.getElementById('playerFavBtn');
+
+            content.innerHTML = item.isVideo ? 
+                `<video src="${item.url}" controls autoplay class="max-w-full max-h-full rounded-lg shadow-2xl"></video>` :
+                `<img src="${item.url}" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl">`;
+            
+            name.innerText = item.name;
+            meta.innerText = `${item.isVideo ? 'Video' : 'Image'} • ${formatSize(item.size)} • ${new Date(item.timestamp).toLocaleDateString()}`;
+            favBtn.innerHTML = `<i class="${item.isFavorite ? 'fas text-red-500' : 'far'} fa-heart"></i>`;
+            favBtn.onclick = () => { toggleFavorite(item.id); updatePlayerContent(); };
+
+            document.getElementById('playerDownloadBtn').onclick = () => {
+                const a = document.createElement('a');
+                a.href = item.url; a.download = item.name; a.click();
+            };
+        }
+
+        function navPlayer(dir) {
+            activePlayerIndex = (activePlayerIndex + dir + items.length) % items.length;
+            updatePlayerContent();
+        }
+
+        function closePlayer() {
+            document.getElementById('playerModal').classList.add('hidden');
+            document.getElementById('playerContent').innerHTML = '';
+        }
+
+        function formatSize(b) {
+            if (b === 0) return '0 B';
+            const k = 1024;
+            const s = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(b) / Math.log(k));
+            return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + s[i];
+        }
+
+        function formatTime(s) {
+            const m = Math.floor(s / 60);
+            const sec = Math.floor(s % 60);
+            return `${m}:${sec.toString().padStart(2, '0')}`;
+        }
+
+        function updateStorage() {
+            const total = items.reduce((acc, curr) => acc + curr.size, 0);
+            const limit = 500 * 1024 * 1024;
+            const pct = Math.min((total / limit) * 100, 100);
+            document.getElementById('storageBar').style.width = `${pct}%`;
+            document.getElementById('storageText').innerText = `${formatSize(total)} used this session`;
+        }
+
+        function showToast(msg) {
+            const root = document.getElementById('toastRoot');
+            const t = document.createElement('div');
+            t.className = 'bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-in';
+            t.innerHTML = `<i class="fas fa-check-circle text-indigo-500"></i> <span class="text-sm font-medium">${msg}</span>`;
+            root.appendChild(t);
+            setTimeout(() => {
+                t.style.opacity = '0';
+                t.style.transform = 'translateX(20px)';
+                setTimeout(() => t.remove(), 300);
+            }, 3000);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (document.getElementById('playerModal').classList.contains('hidden')) return;
+            if (e.key === 'Escape') closePlayer();
+            if (e.key === 'ArrowRight') navPlayer(1);
+            if (e.key === 'ArrowLeft') navPlayer(-1);
+        });
+
+        render();
+    </script>
+
+    <style>
+        @keyframes slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .animate-slide-in { animation: slide-in 0.3s ease-out forwards; }
+    </style>
+</body>
+</html>
