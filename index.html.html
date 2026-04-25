@@ -13,46 +13,12 @@
         .sidebar-item.active { background: #6366f1; color: white; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
         .media-item { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid #e2e8f0; }
         .media-item:hover { transform: translateY(-4px); border-color: #6366f1; box-shadow: 0 12px 20px -8px rgba(0,0,0,0.1); }
-        #authScreen { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); }
     </style>
 </head>
 <body class="flex h-screen overflow-hidden">
 
-    <!-- LOGIN SCREEN -->
-    <div id="authScreen" class="fixed inset-0 z-[1000] flex items-center justify-center p-6 transition-all duration-500">
-        <div class="w-full max-w-md p-10 glass-card rounded-[2.5rem] shadow-2xl">
-            <div class="text-center mb-10">
-                <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-200">
-                    <i class="fas fa-shield-alt text-3xl text-white"></i>
-                </div>
-                <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Vault<span class="text-indigo-600">Pro</span></h1>
-                <p class="text-slate-500 mt-2 font-medium">Shared Cloud Media Library</p>
-            </div>
-
-            <form id="loginForm" class="space-y-5">
-                <div class="relative">
-                    <i class="fas fa-user absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="text" id="userInput" placeholder="Username (zenoom)" required 
-                        class="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium">
-                </div>
-                <div class="relative">
-                    <i class="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="password" id="passInput" placeholder="Password (AdMin123)" required 
-                        class="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium">
-                </div>
-                <button type="submit" id="loginBtn" 
-                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 transition-all active:scale-[0.98]">
-                    Unlock Access
-                </button>
-            </form>
-            <div id="loginError" class="mt-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-semibold text-center hidden flex items-center justify-center gap-2">
-                <i class="fas fa-exclamation-circle"></i> Invalid credentials.
-            </div>
-        </div>
-    </div>
-
     <!-- MAIN APP LAYOUT -->
-    <div id="mainApp" class="hidden flex w-full h-full opacity-0 transition-opacity duration-700">
+    <div id="mainApp" class="flex w-full h-full transition-opacity duration-700">
         <!-- Sidebar -->
         <aside class="w-72 bg-white border-r border-slate-200 flex flex-col p-8">
             <div class="flex items-center gap-3 mb-12">
@@ -121,7 +87,6 @@
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
         // CONFIG & STATE
-        const CREDENTIALS = { u: 'zenoom', p: 'AdMin123' };
         let db, auth, user;
         let items = [];
         let currentFilter = 'all';
@@ -129,37 +94,17 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'vault-app-001';
         const firebaseConfig = JSON.parse(__firebase_config);
 
-        // 1. LOGIN HANDLER
-        document.getElementById('loginForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const u = document.getElementById('userInput').value;
-            const p = document.getElementById('passInput').value;
-            const btn = document.getElementById('loginBtn');
-
-            if (u === CREDENTIALS.u && p === CREDENTIALS.p) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner animate-spin"></i> Syncing...';
-                
-                try {
-                    await startConnection();
-                } catch (err) {
-                    console.error("Connection error", err);
-                    showLoginError("Cloud connection failed. Using offline mode.");
-                    unlockUI(); // Allow access even if cloud fails
-                }
-            } else {
-                showLoginError("Access denied. Check credentials.");
+        // INITIALIZE CONNECTION IMMEDIATELY
+        window.onload = async () => {
+            try {
+                await startConnection();
+            } catch (err) {
+                console.error("Connection error", err);
+                document.getElementById('dbStatusText').innerText = 'Connection Failed';
             }
         };
 
-        function showLoginError(msg) {
-            const err = document.getElementById('loginError');
-            err.innerText = msg;
-            err.classList.remove('hidden');
-            setTimeout(() => err.classList.add('hidden'), 3000);
-        }
-
-        // 2. FIREBASE CONNECTION
+        // 1. FIREBASE CONNECTION
         async function startConnection() {
             const app = initializeApp(firebaseConfig);
             auth = getAuth(app);
@@ -176,47 +121,36 @@
                 if (u) {
                     user = u;
                     setupSync();
-                    unlockUI();
                 }
             });
         }
 
-        function unlockUI() {
-            const authScr = document.getElementById('authScreen');
-            const appScr = document.getElementById('mainApp');
-            
-            authScr.style.opacity = '0';
-            setTimeout(() => {
-                authScr.classList.add('hidden');
-                appScr.classList.remove('hidden');
-                setTimeout(() => appScr.style.opacity = '1', 50);
-            }, 500);
-        }
-
-        // 3. DATABASE SYNC (RULE 1 & 2)
+        // 2. DATABASE SYNC (RULE 1 & 2)
         function setupSync() {
-            // Path: /artifacts/{appId}/public/data/{collection}
             const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'media');
             
-            // Note: Not using complex orderBy to avoid index requirement errors
             onSnapshot(colRef, (snapshot) => {
                 items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 
                 // Visual confirmation
-                document.getElementById('dbStatusIcon').className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
-                document.getElementById('dbStatusText').innerText = 'Cloud Connected';
+                const statusIcon = document.getElementById('dbStatusIcon');
+                if(statusIcon) statusIcon.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+                
+                const statusText = document.getElementById('dbStatusText');
+                if(statusText) statusText.innerText = 'Cloud Connected';
                 
                 render();
             }, (err) => {
                 console.error("Sync error", err);
-                document.getElementById('dbStatusText').innerText = 'Sync Error';
+                const statusText = document.getElementById('dbStatusText');
+                if(statusText) statusText.innerText = 'Sync Error';
             });
         }
 
-        // 4. FILE UPLOAD
+        // 3. FILE UPLOAD
         document.getElementById('fileUpload').onchange = async (e) => {
             const files = Array.from(e.target.files);
-            if (!files.length) return;
+            if (!files.length || !user) return;
 
             for (const file of files) {
                 const reader = new FileReader();
@@ -239,7 +173,7 @@
             }
         };
 
-        // 5. UI ACTIONS
+        // 4. UI ACTIONS
         window.render = () => {
             const grid = document.getElementById('galleryGrid');
             const filtered = items.filter(i => currentFilter === 'all' || (currentFilter === 'fav' && i.isFav));
@@ -275,13 +209,16 @@
 
         window.toggleFav = async (id, e) => {
             e.stopPropagation();
+            if(!db) return;
             const item = items.find(i => i.id === id);
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'media', id), { isFav: !item.isFav });
         };
 
         window.removeItem = async (id, e) => {
             e.stopPropagation();
-            if(confirm("Delete this shared item?")) {
+            if(!db) return;
+            const customConfirm = window.confirm("Delete this shared item?");
+            if(customConfirm) {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'media', id));
             }
         };
